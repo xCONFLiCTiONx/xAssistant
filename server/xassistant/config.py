@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     port: int = 5081
 
     ollama_url: str = "http://192.168.88.50:11434"
-    ollama_model: str = "qwen3.5:2b-q4_K_M"
-    ollama_timeout_seconds: float = Field(default=45.0, gt=0)
+    ollama_model: str = "qwen3.5:4b-q4_K_M"
+    ollama_timeout_seconds: float = Field(default=60.0, gt=0)
     ollama_keep_alive: str = "5m"
 
     timezone: str = "America/Chicago"
