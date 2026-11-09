@@ -12,7 +12,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        buildConfigField("String", "SERVER_BASE_URL", "\"\${providers.gradleProperty("xassistantServerUrl").orElse("http://192.168.88.50:5081").get()}\"")
+        buildConfigField("String", "SERVER_BASE_URL", "\\"${providers.gradleProperty("xassistantServerUrl").orElse("http://192.168.88.50:5081").get()}\"")
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions {
@@ -31,6 +31,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.7")
+    implementation("androidx.compose.runtime:runtime-livedata:1.7.8")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
     implementation("androidx.compose.ui:ui:1.7.8")
     implementation("androidx.compose.ui:ui-tooling-preview:1.7.8")
