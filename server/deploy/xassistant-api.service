@@ -1,0 +1,27 @@
+[Unit]
+Description=xAssistant Reminder API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xassistant
+Group=xassistant
+WorkingDirectory=/opt/xassistant-server/app
+EnvironmentFile=/etc/xassistant-server.env
+ExecStart=/opt/xassistant-server/venv/bin/uvicorn xassistant.main:app --host ${XASSISTANT_HOST} --port ${XASSISTANT_PORT}
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=60
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/xassistant
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
