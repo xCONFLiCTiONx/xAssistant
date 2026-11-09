@@ -4,7 +4,8 @@ set -Eeuo pipefail
 # Install/update xAssistant's API only. This does not change Ollama models,
 # firewall rules, Cloudflare, or any existing xServer service.
 
-ROOT="$(git -C "${BASH_SOURCE[0]%/*}" rev-parse --show-toplevel 2>/dev/null || cd "${BASH_SOURCE[0]%/*}/../../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 SERVER_SOURCE="$ROOT/server"
 APP_ROOT="/opt/xassistant-server"
 APP_DIR="$APP_ROOT/app"
@@ -48,6 +49,7 @@ if ! id xassistant >/dev/null 2>&1; then
 fi
 
 info "INSTALL APPLICATION"
+install -d -o xassistant -g xassistant -m 0750 /var/lib/xassistant
 install -d -o root -g root -m 0755 "$APP_DIR"
 cp -a "$SERVER_SOURCE/." "$APP_DIR/"
 if [[ ! -x "$VENV/bin/python" ]]; then
