@@ -71,8 +71,9 @@ class ReminderApi(private val baseUrl: String = BuildConfig.SERVER_BASE_URL) {
         )
     }
 
-    suspend fun list(): List<ReminderItem> {
-        val array = JSONArray(request("/v1/reminders"))
+    suspend fun list(includeInactive: Boolean = false): List<ReminderItem> {
+        val suffix = if (includeInactive) "?include_inactive=true" else ""
+        val array = JSONArray(request("/v1/reminders$suffix"))
         return (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
             ReminderItem(
