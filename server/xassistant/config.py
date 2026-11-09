@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     ollama_keep_alive: str = "5m"
 
     timezone: str = "America/Chicago"
+    database_path: str = "./data/xassistant.sqlite3"
 
 
 @lru_cache
