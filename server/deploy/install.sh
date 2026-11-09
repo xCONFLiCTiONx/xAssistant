@@ -31,7 +31,7 @@ info "CHECK OLLAMA"
 command -v curl >/dev/null || fail "curl is required."
 curl --fail --silent --show-error --max-time 5 "$OLLAMA_URL/api/tags" >/dev/null \
   || fail "Ollama is not responding at $OLLAMA_URL."
-if ! command -v ollama >/dev/null || ! ollama list | awk 'NR>1 {print $1}' | grep -Fxq "$MODEL"; then
+if ! command -v ollama >/dev/null || ! OLLAMA_HOST="$OLLAMA_URL" ollama list | awk 'NR>1 {print $1}' | grep -Fxq "$MODEL"; then
   fail "Required model $MODEL is not installed. This installer will not download models."
 fi
 
