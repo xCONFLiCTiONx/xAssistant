@@ -22,16 +22,51 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import kotlinx.coroutines.launch
 import java.util.Locale
+
+private val xAssistantDarkColors = darkColorScheme(
+    primary = Color(0xFFB6C7FF),
+    onPrimary = Color(0xFF172B55),
+    secondary = Color(0xFFBFC7DC),
+    onSecondary = Color(0xFF293144),
+    background = Color(0xFF101318),
+    onBackground = Color(0xFFE2E6EF),
+    surface = Color(0xFF191E27),
+    onSurface = Color(0xFFE2E6EF),
+    surfaceVariant = Color(0xFF29313D),
+    onSurfaceVariant = Color(0xFFC2C9D6),
+    outline = Color(0xFF8993A5),
+    error = Color(0xFFFFB4AB)
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) { ReminderScreen() } } }
+
+        window.statusBarColor = android.graphics.Color.rgb(16, 19, 24)
+        window.navigationBarColor = android.graphics.Color.rgb(16, 19, 24)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+
+        setContent {
+            MaterialTheme(colorScheme = xAssistantDarkColors) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    ReminderScreen()
+                }
+            }
+        }
     }
 
     @Composable
