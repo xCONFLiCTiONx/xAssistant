@@ -28,3 +28,29 @@ class InterpretResponse(BaseModel):
     status: Literal["interpreted", "clarification_required", "rejected"]
     interpretation: ReminderInterpretation | None = None
     error: str | None = None
+
+
+class ReminderMutation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=240)
+    scheduled_at: datetime
+    timezone: str = Field(min_length=1, max_length=80)
+    recurrence: str | None = Field(default=None, max_length=500)
+
+
+class ReminderRecord(ReminderMutation):
+    id: int
+    request_id: str
+    original_transcript: str
+    status: Literal["active", "completed", "cancelled"]
+    created_at: datetime
+
+
+class ReminderSaveResponse(BaseModel):
+    request_id: str
+    original_transcript: str
+    status: Literal["saved", "clarification_required", "rejected"]
+    reminder: ReminderRecord | None = None
+    interpretation: ReminderInterpretation | None = None
+    error: str | None = None
