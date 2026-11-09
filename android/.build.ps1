@@ -11,18 +11,18 @@ $ApkPath = Join-Path $PSScriptRoot "app\build\outputs\apk\debug\app-debug.apk"
 $jdkCandidates = @()
 if ($env:JAVA_HOME) { $jdkCandidates += $env:JAVA_HOME }
 $jdkCandidates += @(
-    "C:\\Program Files\\Android\\Android Studio\\jbr",
-    "$env:LOCALAPPDATA\\Programs\\Android Studio\\jbr",
-    "$env:LOCALAPPDATA\\xAssistant\\jdk\\jdk-21"
+    "C:\Program Files\Android\Android Studio\jbr",
+    "$env:LOCALAPPDATA\Programs\Android Studio\jbr",
+    "$env:LOCALAPPDATA\xAssistant\jdk\jdk-21"
 )
 
 $CompatibleJdk = $null
 foreach ($candidate in ($jdkCandidates | Select-Object -Unique)) {
-    $javaExe = Join-Path $candidate "bin\\java.exe"
+    $javaExe = Join-Path $candidate "bin\java.exe"
     if (-not (Test-Path $javaExe)) { continue }
 
     $versionOutput = (& $javaExe -version 2>&1 | Out-String)
-    if ($versionOutput -match 'version "?(\\d+)') {
+    if ($versionOutput -match 'version "?(\d+)') {
         $javaMajor = [int]$Matches[1]
         if ($javaMajor -eq 21) {
             $CompatibleJdk = $candidate
@@ -37,7 +37,7 @@ foreach ($candidate in ($jdkCandidates | Select-Object -Unique)) {
 
 # If no compatible JDK is installed, bootstrap a private Java 21 runtime.
 if (-not $CompatibleJdk) {
-    $JdkRoot = Join-Path $env:LOCALAPPDATA "xAssistant\\jdk"
+    $JdkRoot = Join-Path $env:LOCALAPPDATA "xAssistant\jdk"
     $JdkArchive = Join-Path $JdkRoot "temurin-21-windows-x64.zip"
     New-Item -ItemType Directory -Path $JdkRoot -Force | Out-Null
 
@@ -51,7 +51,7 @@ if (-not $CompatibleJdk) {
     Remove-Item $JdkArchive -Force
 
     $ExtractedJdk = Get-ChildItem $JdkRoot -Directory |
-        Where-Object { Test-Path (Join-Path $_.FullName "bin\\java.exe") } |
+        Where-Object { Test-Path (Join-Path $_.FullName "bin\java.exe") } |
         Select-Object -First 1
     if (-not $ExtractedJdk) {
         throw "JDK 21 extraction completed, but java.exe was not found under $JdkRoot"
@@ -61,7 +61,7 @@ if (-not $CompatibleJdk) {
 
 $env:JAVA_HOME = $CompatibleJdk
 $env:PATH = "$(Join-Path $env:JAVA_HOME 'bin');$env:PATH"
-$SelectedJavaVersion = (& (Join-Path $env:JAVA_HOME "bin\\java.exe") -version 2>&1 | Select-Object -First 1)
+$SelectedJavaVersion = (& (Join-Path $env:JAVA_HOME "bin\java.exe") -version 2>&1 | Select-Object -First 1)
 Write-Host "==> Using JAVA_HOME: $env:JAVA_HOME" -ForegroundColor Cyan
 Write-Host "==> Java: $SelectedJavaVersion" -ForegroundColor Cyan
 
@@ -84,7 +84,6 @@ if (-not $env:ANDROID_SDK_ROOT -and $env:ANDROID_HOME) {
     $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
 }
 
-Write-Host "==> Using JAVA_HOME: $env:JAVA_HOME" -ForegroundColor Cyan
 if ($env:ANDROID_HOME) {
     Write-Host "==> Using ANDROID_HOME: $env:ANDROID_HOME" -ForegroundColor Cyan
 }
