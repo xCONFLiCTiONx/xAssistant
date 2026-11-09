@@ -47,9 +47,20 @@ if ($env:ANDROID_HOME) {
     Write-Host "==> Using ANDROID_HOME: $env:ANDROID_HOME" -ForegroundColor Cyan
 }
 
-# 2. Find Gradle. A Gradle wrapper is not currently checked into this repository.
-$GradleCommand = Get-Command gradle -ErrorAction SilentlyContinue
+# 2. Find Gradle. Prefer the repository wrapper, then PATH, then cached distributions.
 $GradleBat = Join-Path $PSScriptRoot "gradlew.bat"
+$GradleCommand = Get-Command gradle -ErrorAction SilentlyContinue
+$CachedGradle = $null
+
+if (-not (Test-Path $GradleBat) -and -not $GradleCommand) {
+    $GradleCache = Join-Path $env:USERPROFILE ".gradlewrapperdists"
+    if (Test-Path $GradleCache) {
+        $CachedGradle = Get-ChildItem $GradleCache -Filter "gradle.bat" -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "gradle-8\.(11|1[2-9]|[2-9]\d)\." } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+    }
+}
 
 if (Test-Path $GradleBat) {
     Write-Host "==> Building Debug APK with repository Gradle wrapper..." -ForegroundColor Cyan
@@ -57,8 +68,11 @@ if (Test-Path $GradleBat) {
 } elseif ($GradleCommand) {
     Write-Host "==> Building Debug APK with installed Gradle..." -ForegroundColor Cyan
     & $GradleCommand.Source --no-daemon :app:assembleDebug
+} elseif ($CachedGradle) {
+    Write-Host "==> Building Debug APK with cached Gradle..." -ForegroundColor Cyan
+    & $CachedGradle.FullName --no-daemon :app:assembleDebug
 } else {
-    throw "Gradle was not found. Install Gradle 8.11.1 or newer and add it to PATH, then rerun this script."
+    throw "Gradle 8.11.1 or newer was not found. Install it or open the project in Android Studio once so Gradle can be downloaded, then rerun this script."
 }
 if ($LASTEXITCODE -ne 0) {
     throw "Gradle $BuildVariant build failed with exit code $LASTEXITCODE"
