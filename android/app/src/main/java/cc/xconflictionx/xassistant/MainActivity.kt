@@ -116,10 +116,14 @@ class MainActivity : ComponentActivity() {
         }
 
         suspend fun refreshReminders() {
-            val items = api.list()
+            val items = api.list(includeInactive = true)
             reminders = items
-            items.filter { it.status == "active" }.forEach {
-                runCatching { ReminderAlarmScheduler.schedule(context, it.id, it.title, it.scheduledAt) }
+            items.forEach {
+                if (it.status == "active") {
+                    runCatching { ReminderAlarmScheduler.schedule(context, it.id, it.title, it.scheduledAt) }
+                } else {
+                    ReminderAlarmScheduler.cancel(context, it.id)
+                }
             }
         }
 
