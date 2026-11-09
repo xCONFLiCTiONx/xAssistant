@@ -38,18 +38,30 @@ class MainActivity : ComponentActivity() {
     private fun ReminderScreen() {
         var transcript by remember { mutableStateOf("") }
         var result by remember { mutableStateOf<ReminderResult?>(null) }
+        var reminders by remember { mutableStateOf<List<ReminderItem>>(emptyList()) }
         var busy by remember { mutableStateOf(false) }
         var message by remember { mutableStateOf("Speak or type a reminder.") }
         val scope = rememberCoroutineScope()
+        val api = remember { ReminderApi() }
+
+        suspend fun refreshReminders() {
+            reminders = api.list()
+        }
+
         val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { activityResult ->
             if (activityResult.resultCode == RESULT_OK) {
                 val recognized = activityResult.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
                 if (recognized != null) {
                     transcript = recognized
                     result = null
-                    message = "Transcript captured. Review it, then send."
+                    message = "Transcript captured. Review it, then save."
                 }
             }
+        }
+
+        LaunchedEffect(Unit) {
+            try { refreshReminders() }
+            catch (_: Exception) { message = "xServer is not reachable yet. You can still draft a reminder." }
         }
 
         Column(
@@ -86,35 +98,90 @@ class MainActivity : ComponentActivity() {
                         message = "Sending recognized text to xServer…"
                         scope.launch {
                             try {
-                                result = ReminderApi().interpret(exactTranscript)
-                                message = when (result?.status) {
-                                    "interpreted" -> "Interpretation received — not saved yet."
-                                    "clarification_required" -> "This request needs clarification."
-                                    else -> "The request was not accepted."
+                                result = api.create(exactTranscript)
+                                when (result?.status) {
+                                    "saved" -> {
+                                        message = "✓ Reminder saved on xServer."
+                                        transcript = ""
+                                        refreshReminders()
+                                    }
+                                    "clarification_required" -> message = "The request needs clarification."
+                                    else -> message = "✕ Reminder was not saved."
                                 }
                             } catch (error: Exception) {
-                                message = "Could not reach xServer: ${error.message ?: "unknown error"}"
+                                message = "✕ Could not save on xServer: ${error.message ?: "unknown error"}"
                             } finally { busy = false }
                         }
                     }
-                }, enabled = !busy && transcript.isNotBlank()) { Text(if (busy) "Working…" else "Interpret") }
+                }, enabled = !busy && transcript.isNotBlank()) { Text(if (busy) "Working…" else "Save reminder") }
             }
             Text(message, style = MaterialTheme.typography.bodyMedium)
+
             result?.let { response ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Server response", style = MaterialTheme.typography.titleMedium)
+                        Text("Server result", style = MaterialTheme.typography.titleMedium)
                         Text("Original text: ${response.originalTranscript}")
                         response.title?.let { Text("Reminder: $it") }
                         response.scheduledAt?.let { Text("When: $it") }
                         response.recurrence?.let { Text("Repeats: $it") }
                         response.clarification?.let { Text("Question: $it") }
                         response.error?.let { Text("Error: $it", color = MaterialTheme.colorScheme.error) }
-                        if (response.status == "interpreted") Text("Interpretation only. The current server endpoint does not save reminders.")
+                        if (response.status == "saved") Text("✓ Saved to the xServer reminder database.")
                     }
                 }
             }
-            Text("Speech is converted to text on this device. xServer receives the text only.", style = MaterialTheme.typography.bodySmall)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("My reminders", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(onClick = {
+                    scope.launch {
+                        try { refreshReminders(); message = "Reminder list updated." }
+                        catch (error: Exception) { message = "Could not refresh: ${error.message}" }
+                    }
+                }, enabled = !busy) { Text("Refresh") }
+            }
+
+            if (reminders.isEmpty()) {
+                Text("No active reminders found.")
+            } else {
+                reminders.forEach { reminder ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(reminder.title, style = MaterialTheme.typography.titleMedium)
+                            Text(reminder.scheduledAt)
+                            reminder.recurrence?.let { Text("Repeats: $it") }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        try {
+                                            api.complete(reminder.id)
+                                            refreshReminders()
+                                            message = "Reminder marked complete."
+                                        } catch (error: Exception) { message = "Update failed: ${error.message}" }
+                                    }
+                                }) { Text("Complete") }
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        try {
+                                            api.cancel(reminder.id)
+                                            refreshReminders()
+                                            message = "Reminder cancelled."
+                                        } catch (error: Exception) { message = "Cancel failed: ${error.message}" }
+                                    }
+                                }) { Text("Cancel") }
+                            }
+                        }
+                    }
+                }
+            }
+            Text(
+                "Speech is converted to text on this device. xServer receives the text only. Server-side notification delivery is not yet enabled.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
