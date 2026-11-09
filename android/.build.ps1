@@ -6,46 +6,16 @@ Set-Location $PSScriptRoot
 $BuildVariant = "Debug"
 $ApkPath = Join-Path $PSScriptRoot "app\build\outputs\apk\debug\app-debug.apk"
 
-# 1. Use only Java installations already present on this computer.
-# Do not download or install a JDK automatically.
-$jdkCandidates = @()
-if ($env:JAVA_HOME) { $jdkCandidates += $env:JAVA_HOME }
-$jdkCandidates += @(
-    "C:\Program Files\Android\Android Studio\jbr",
-    "$env:LOCALAPPDATA\Programs\Android Studio\jbr"
-)
-
-$CompatibleJdk = $null
-$DetectedJava = @()
-foreach ($candidate in ($jdkCandidates | Select-Object -Unique)) {
-    $javaExe = Join-Path $candidate "bin\java.exe"
-    if (-not (Test-Path $javaExe)) { continue }
-
-    $versionError = Join-Path $env:TEMP ("xassistant-java-version-" + [guid]::NewGuid().ToString("N") + ".txt")
-    try {
-        $versionProcess = Start-Process -FilePath $javaExe -ArgumentList "-version" -NoNewWindow -Wait -PassThru -RedirectStandardError $versionError
-        $versionOutput = Get-Content -LiteralPath $versionError -Raw -ErrorAction SilentlyContinue
-    } finally {
-        Remove-Item -LiteralPath $versionError -Force -ErrorAction SilentlyContinue
-    }
-    if ($versionProcess.ExitCode -ne 0) { continue }
-
-    if ($versionOutput -match 'version "?([0-9]+)') {
-        $javaMajor = [int]$Matches[1]
-        $DetectedJava += "Java $javaMajor ($candidate)"
-        if (-not $CompatibleJdk) { $CompatibleJdk = $candidate }
-    }
-}
-
-if (-not $CompatibleJdk) {
-    throw "No installed JDK was found. Install/configure your preferred JDK and set JAVA_HOME. This script will not download one."
-}
-
-$env:JAVA_HOME = $CompatibleJdk
+# Use the Android Studio JBR already installed on this computer.
+# This script never downloads or installs a JDK.
+$AndroidStudioJbr = "C:\Program Files\Android\Android Studio\jbr"
+$JavaExe = Join-Path $AndroidStudioJbr "bin\java.exe"
+if (-not (Test-Path $JavaExe)) { throw "Android Studio JBR not found at $JavaExe. No JDK will be downloaded." }
+$env:JAVA_HOME = $AndroidStudioJbr
 $env:PATH = "$(Join-Path $env:JAVA_HOME 'bin');$env:PATH"
-Write-Host "==> Using installed JAVA_HOME: $env:JAVA_HOME" -ForegroundColor Cyan
-Write-Host "==> Detected: $($DetectedJava -join '; ')" -ForegroundColor Gray
-
+$JavaVersionOutput = (& $JavaExe -version 2>&1 | Out-String)
+if ($JavaVersionOutput -notmatch 'version "25\.') { throw "Expected installed Android Studio JBR 25.x. Found: $JavaVersionOutput" }
+Write-Host "==> Using Android Studio JBR: $env:JAVA_HOME" -ForegroundColor Cyan
 if (-not $env:ANDROID_HOME -and -not $env:ANDROID_SDK_ROOT) {
     $sdkCandidates = @(
         (Join-Path $env:LOCALAPPDATA "Android\Sdk"),
@@ -69,26 +39,13 @@ if ($env:ANDROID_HOME) {
     Write-Host "==> Using ANDROID_HOME: $env:ANDROID_HOME" -ForegroundColor Cyan
 }
 
-# 2. Use only Gradle already installed or already cached by the user.
-# Never download a Gradle distribution automatically.
-$GradleCommand = Get-Command gradle -ErrorAction SilentlyContinue
-$GradleExecutable = $null
-if ($GradleCommand) {
-    $GradleExecutable = $GradleCommand.Source
-} else {
-    $GradleCache = Join-Path $env:USERPROFILE ".gradle\wrapper\dists"
-    if (Test-Path $GradleCache) {
-        $CachedGradle = Get-ChildItem $GradleCache -Filter "gradle.bat" -File -Recurse -ErrorAction SilentlyContinue |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
-        if ($CachedGradle) { $GradleExecutable = $CachedGradle.FullName }
-    }
-}
-if (-not $GradleExecutable) {
-    throw "No installed/cached Gradle was found. This script will not download one. Run 'gradle --version' or tell me which Gradle versions are installed."
-}
-
-Write-Host "==> Using Gradle: $GradleExecutable" -ForegroundColor Cyan
+# Use the exact Gradle distribution already cached by the user.
+# This script never downloads or installs Gradle.
+$GradleExecutable = Join-Path $env:USERPROFILE ".gradle\wrapper\dists\gradle-9.5.0-bin\bvnork1r7n8i6kp5cnkibsc9q\gradle-9.5.0\bin\gradle.bat"
+if (-not (Test-Path $GradleExecutable)) { throw "Cached Gradle 9.5.0 was not found at $GradleExecutable. No Gradle distribution will be downloaded." }
+$GradleVersionOutput = (& $GradleExecutable --version 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0 -or $GradleVersionOutput -notmatch "Gradle 9\.5\.0") { throw "Expected cached Gradle 9.5.0. Version check failed: $GradleVersionOutput" }
+Write-Host "==> Using cached Gradle 9.5.0: $GradleExecutable" -ForegroundColor Cyan
 Write-Host "==> Building Debug APK..." -ForegroundColor Cyan
 & $GradleExecutable --no-daemon :app:assembleDebug
 if ($LASTEXITCODE -ne 0) {
