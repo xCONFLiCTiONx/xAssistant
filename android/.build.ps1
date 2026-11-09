@@ -6,22 +6,64 @@ Set-Location $PSScriptRoot
 $BuildVariant = "Debug"
 $ApkPath = Join-Path $PSScriptRoot "app\build\outputs\apk\debug\app-debug.apk"
 
-# 1. Configure JAVA_HOME and ANDROID_HOME when they are not already configured.
-if (-not $env:JAVA_HOME -or -not (Test-Path (Join-Path $env:JAVA_HOME "bin\java.exe"))) {
-    $jbrCandidates = @(
-        "C:\Program Files\Android\Android Studio\jbr",
-        "$env:LOCALAPPDATA\Programs\Android Studio\jbr"
-    )
-    foreach ($candidate in $jbrCandidates) {
-        if (Test-Path (Join-Path $candidate "bin\java.exe")) {
-            $env:JAVA_HOME = $candidate
+# 1. Select a JDK supported by Gradle 8.11.1 and Android Gradle Plugin 8.9.2.
+# Java 25 is too new for this project. Prefer Java 21; Java 17 is also supported.
+$jdkCandidates = @()
+if ($env:JAVA_HOME) { $jdkCandidates += $env:JAVA_HOME }
+$jdkCandidates += @(
+    "C:\\Program Files\\Android\\Android Studio\\jbr",
+    "$env:LOCALAPPDATA\\Programs\\Android Studio\\jbr",
+    "$env:LOCALAPPDATA\\xAssistant\\jdk\\jdk-21"
+)
+
+$CompatibleJdk = $null
+foreach ($candidate in ($jdkCandidates | Select-Object -Unique)) {
+    $javaExe = Join-Path $candidate "bin\\java.exe"
+    if (-not (Test-Path $javaExe)) { continue }
+
+    $versionOutput = (& $javaExe -version 2>&1 | Out-String)
+    if ($versionOutput -match 'version "?(\\d+)') {
+        $javaMajor = [int]$Matches[1]
+        if ($javaMajor -eq 21) {
+            $CompatibleJdk = $candidate
             break
         }
+        if ($javaMajor -eq 17 -and -not $CompatibleJdk) {
+            $CompatibleJdk = $candidate
+        }
+        Write-Host "==> Skipping unsupported Java $javaMajor at $candidate" -ForegroundColor Yellow
     }
 }
-if (-not $env:JAVA_HOME -or -not (Test-Path (Join-Path $env:JAVA_HOME "bin\java.exe"))) {
-    throw "JDK 17 was not found. Install Android Studio or set JAVA_HOME to a JDK 17 installation."
+
+# If no compatible JDK is installed, bootstrap a private Java 21 runtime.
+if (-not $CompatibleJdk) {
+    $JdkRoot = Join-Path $env:LOCALAPPDATA "xAssistant\\jdk"
+    $JdkArchive = Join-Path $JdkRoot "temurin-21-windows-x64.zip"
+    New-Item -ItemType Directory -Path $JdkRoot -Force | Out-Null
+
+    Write-Host "==> Downloading Temurin JDK 21..." -ForegroundColor Cyan
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $JdkUrl = "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse"
+    Invoke-WebRequest -Uri $JdkUrl -OutFile $JdkArchive -UseBasicParsing
+
+    Write-Host "==> Extracting JDK 21..." -ForegroundColor Cyan
+    Expand-Archive -LiteralPath $JdkArchive -DestinationPath $JdkRoot -Force
+    Remove-Item $JdkArchive -Force
+
+    $ExtractedJdk = Get-ChildItem $JdkRoot -Directory |
+        Where-Object { Test-Path (Join-Path $_.FullName "bin\\java.exe") } |
+        Select-Object -First 1
+    if (-not $ExtractedJdk) {
+        throw "JDK 21 extraction completed, but java.exe was not found under $JdkRoot"
+    }
+    $CompatibleJdk = $ExtractedJdk.FullName
 }
+
+$env:JAVA_HOME = $CompatibleJdk
+$env:PATH = "$(Join-Path $env:JAVA_HOME 'bin');$env:PATH"
+$SelectedJavaVersion = (& (Join-Path $env:JAVA_HOME "bin\\java.exe") -version 2>&1 | Select-Object -First 1)
+Write-Host "==> Using JAVA_HOME: $env:JAVA_HOME" -ForegroundColor Cyan
+Write-Host "==> Java: $SelectedJavaVersion" -ForegroundColor Cyan
 
 if (-not $env:ANDROID_HOME -and -not $env:ANDROID_SDK_ROOT) {
     $sdkCandidates = @(
