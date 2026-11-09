@@ -93,6 +93,9 @@ class MainActivity : ComponentActivity() {
             android.content.pm.PackageManager.PERMISSION_GRANTED) }
         var exactAlarmsAllowed by remember { mutableStateOf(Build.VERSION.SDK_INT < 31 ||
             (context.getSystemService(ALARM_SERVICE) as android.app.AlarmManager).canScheduleExactAlarms()) }
+        var batteryOptimizationIgnored by remember { mutableStateOf(
+            (context.getSystemService(POWER_SERVICE) as android.os.PowerManager).isIgnoringBatteryOptimizations(packageName)
+        ) }
 
         val workInfo by workManager.getWorkInfoByIdLiveData(activeWorkId).observeAsState()
         val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -105,6 +108,8 @@ class MainActivity : ComponentActivity() {
                 android.content.pm.PackageManager.PERMISSION_GRANTED
             exactAlarmsAllowed = Build.VERSION.SDK_INT < 31 ||
                 (context.getSystemService(ALARM_SERVICE) as android.app.AlarmManager).canScheduleExactAlarms()
+            batteryOptimizationIgnored = (context.getSystemService(POWER_SERVICE) as android.os.PowerManager)
+                .isIgnoringBatteryOptimizations(packageName)
         }
 
         DisposableEffect(Unit) {
@@ -199,6 +204,19 @@ class MainActivity : ComponentActivity() {
                             if (Build.VERSION.SDK_INT >= 31) startActivity(Intent(
                                 Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
                         }) { Text("Allow exact alarms") }
+                    }
+                }
+            }
+            if (!batteryOptimizationIgnored) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("For the most reliable background reminder saving and delivery, exclude xAssistant from battery optimization. Android will still manage normal app activity.")
+                        Button(onClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                    .setData(Uri.parse("package:$packageName")))
+                            }
+                        }) { Text("Disable battery optimization") }
                     }
                 }
             }
