@@ -53,7 +53,7 @@ $GradleCommand = Get-Command gradle -ErrorAction SilentlyContinue
 $CachedGradle = $null
 
 if (-not (Test-Path $GradleBat) -and -not $GradleCommand) {
-    $GradleCache = Join-Path $env:USERPROFILE ".gradlewrapperdists"
+    $GradleCache = Join-Path $env:USERPROFILE ".gradle\\wrapper\\dists"
     if (Test-Path $GradleCache) {
         $CachedGradle = Get-ChildItem $GradleCache -Filter "gradle.bat" -File -Recurse -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -match "gradle-8\.(11|1[2-9]|[2-9]\d)\." } |
