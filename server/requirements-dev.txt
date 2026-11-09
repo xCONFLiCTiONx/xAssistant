@@ -1,0 +1,2 @@
+-e .[dev]
+pydantic-settings>=2.5,<3
