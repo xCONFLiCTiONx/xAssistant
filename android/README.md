@@ -7,7 +7,9 @@ Native Kotlin / Jetpack Compose phone client.
 - Device speech recognition and typed reminder entry; audio is not uploaded.
 - Durable reminder-save requests through WorkManager. A save already queued continues when the app is backgrounded or its process is reclaimed, and waits for network connectivity instead of losing the request.
 - Server-backed reminder list, completion, and cancellation.
+- Immediate "Reminder saved" notification after the server confirms a successful save, including when the app is backgrounded.
 - Local Android notifications scheduled with AlarmManager after the server confirms the reminder was saved.
+- In-app link to Android's battery-optimization exemption screen, plus notification and exact-alarm permission prompts.
 - Exact alarms during Doze when the user grants Android's exact-alarm access.
 - Notification delivery without a persistent service or polling loop; the app remains idle between reminder events.
 - Alarm restoration after device reboot and exact-alarm permission changes.
@@ -17,7 +19,7 @@ Native Kotlin / Jetpack Compose phone client.
 
 ## Notification setup
 
-On first launch, allow notifications. Also grant **Allow exact alarms** in the app's prompt/settings link. Without notification permission, Android cannot show reminders. Without exact-alarm access, Android falls back to inexact alarms, which may be delayed by Doze.
+On first launch, allow notifications. Also grant **Allow exact alarms** in the app's prompt/settings link. Use **Disable battery optimization** in the app to open Android's system exemption prompt for xAssistant. This is optional but recommended for the most reliable background work on heavily customized Android builds. Without notification permission, Android cannot show reminders. Without exact-alarm access, Android falls back to inexact alarms, which may be delayed by Doze.
 
 Android preserves scheduled alarms when the app process is killed or swiped away. No always-running foreground service is used. Android force-stop, uninstall, or user-revoked permissions can still prevent delivery; Android does not permit an app to bypass those controls.
 
@@ -35,7 +37,7 @@ The current development endpoint uses cleartext HTTP and is intended for the tru
 
 ## Current delivery boundary
 
-The phone schedules notifications locally for reminders returned by xServer when the app syncs. This means reminders saved on the phone still fire without internet at the due time, and Wear OS can mirror phone notifications to a paired watch.
+The phone stores a local alarm record (reminder ID, title, and scheduled timestamp) in app-private SharedPreferences and registers the alarm with Android AlarmManager. This small local cache lets an already-synced reminder fire without internet and survive ordinary process termination/reboot. The full reminder list and authoritative reminder data remain on xServer; the app does not currently maintain a complete offline database. The phone schedules notifications locally for reminders returned by xServer when the app syncs. This means reminders saved on the phone still fire without internet at the due time, and Wear OS can mirror phone notifications to a paired watch.
 
 The server currently persists reminders but does not run a durable delivery scheduler or send FCM push notifications to registered devices. Reminders created by another client while the phone is not syncing are therefore not guaranteed to reach this phone yet. Server-side scheduling/push and device registration are the next backend requirement for reliable cross-device delivery. Recurring reminders also need scheduler expansion beyond their first occurrence.
 
