@@ -41,11 +41,11 @@ if ($env:ANDROID_HOME) {
 
 # Use the exact Gradle distribution already cached by the user.
 # This script never downloads or installs Gradle.
-$GradleExecutable = Join-Path $env:USERPROFILE ".gradle\wrapper\dists\gradle-9.5.0-bin\bvnork1r7n8i6kp5cnkibsc9q\gradle-9.5.0\bin\gradle.bat"
-if (-not (Test-Path $GradleExecutable)) { throw "Cached Gradle 9.5.0 was not found at $GradleExecutable. No Gradle distribution will be downloaded." }
+$GradleExecutable = Join-Path $env:USERPROFILE ".gradle\wrapper\dists\gradle-9.6.0-bin\42k10rwplmzkhuboz9kdazi7s\gradle-9.6.0\bin\gradle.bat"
+if (-not (Test-Path $GradleExecutable)) { throw "Cached Gradle 9.6.0 was not found at $GradleExecutable. No Gradle distribution will be downloaded." }
 $GradleVersionOutput = (& $GradleExecutable --version 2>&1 | Out-String)
-if ($LASTEXITCODE -ne 0 -or $GradleVersionOutput -notmatch "Gradle 9\.5\.0") { throw "Expected cached Gradle 9.5.0. Version check failed: $GradleVersionOutput" }
-Write-Host "==> Using cached Gradle 9.5.0: $GradleExecutable" -ForegroundColor Cyan
+if ($LASTEXITCODE -ne 0 -or $GradleVersionOutput -notmatch "Gradle 9\.6\.0") { throw "Expected cached Gradle 9.6.0. Version check failed: $GradleVersionOutput" }
+Write-Host "==> Using cached Gradle 9.6.0: $GradleExecutable" -ForegroundColor Cyan
 Write-Host "==> Building Debug APK..." -ForegroundColor Cyan
 & $GradleExecutable --no-daemon :app:assembleDebug
 if ($LASTEXITCODE -ne 0) {
