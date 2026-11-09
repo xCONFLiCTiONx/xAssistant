@@ -61,6 +61,7 @@ class ReminderSaveWorker(
                     return Result.failure(output("rejected", original, "The server returned incomplete reminder details."))
                 }
                 ReminderAlarmScheduler.schedule(applicationContext, id, title, scheduledAt)
+                ReminderAlarmScheduler.showSavedNotification(applicationContext, id, title, scheduledAt)
                 Result.success(androidx.work.Data.Builder()
                     .putString(KEY_STATUS, "saved")
                     .putString(KEY_ORIGINAL, original)
