@@ -107,6 +107,36 @@ object ReminderAlarmScheduler {
         }
     }
 
+    fun showSavedNotification(context: Context, id: Int, title: String, scheduledAt: String) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) return
+
+        val channelId = "xassistant_save_confirmations"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(NotificationChannel(
+                channelId, "Reminder confirmations", NotificationManager.IMPORTANCE_DEFAULT
+            ).apply { description = "Confirms when xAssistant successfully saves a reminder" })
+        }
+        val openApp = PendingIntent.getActivity(
+            context, id + 1_000_000, Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("Reminder saved")
+            .setContentText("$title · ${ReminderTime.display(scheduledAt)}")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(
+                "$title\n${ReminderTime.display(scheduledAt)}"
+            ))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setAutoCancel(true)
+            .setContentIntent(openApp)
+            .build()
+        NotificationManagerCompat.from(context).notify(id + 1_000_000, notification)
+    }
+
     private fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java)
