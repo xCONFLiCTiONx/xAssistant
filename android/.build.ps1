@@ -47,33 +47,58 @@ if ($env:ANDROID_HOME) {
     Write-Host "==> Using ANDROID_HOME: $env:ANDROID_HOME" -ForegroundColor Cyan
 }
 
-# 2. Find Gradle. Prefer the repository wrapper, then PATH, then cached distributions.
+# 2. Find Gradle. Use the repository wrapper or installed/cached Gradle.
+# If none exists, download the pinned compatible Gradle distribution automatically.
 $GradleBat = Join-Path $PSScriptRoot "gradlew.bat"
 $GradleCommand = Get-Command gradle -ErrorAction SilentlyContinue
-$CachedGradle = $null
+$GradleExecutable = $null
 
-if (-not (Test-Path $GradleBat) -and -not $GradleCommand) {
-    $GradleCache = Join-Path $env:USERPROFILE ".gradle\\wrapper\\dists"
+if (Test-Path $GradleBat) {
+    $GradleExecutable = $GradleBat
+} elseif ($GradleCommand) {
+    $GradleExecutable = $GradleCommand.Source
+} else {
+    $GradleCache = Join-Path $env:USERPROFILE ".gradle\wrapper\dists"
     if (Test-Path $GradleCache) {
         $CachedGradle = Get-ChildItem $GradleCache -Filter "gradle.bat" -File -Recurse -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -match "gradle-8\.(11|1[2-9]|[2-9]\d)\." } |
             Sort-Object FullName -Descending |
             Select-Object -First 1
+
+        if ($CachedGradle) {
+            $GradleExecutable = $CachedGradle.FullName
+        }
     }
 }
 
-if (Test-Path $GradleBat) {
-    Write-Host "==> Building Debug APK with repository Gradle wrapper..." -ForegroundColor Cyan
-    & $GradleBat --no-daemon :app:assembleDebug
-} elseif ($GradleCommand) {
-    Write-Host "==> Building Debug APK with installed Gradle..." -ForegroundColor Cyan
-    & $GradleCommand.Source --no-daemon :app:assembleDebug
-} elseif ($CachedGradle) {
-    Write-Host "==> Building Debug APK with cached Gradle..." -ForegroundColor Cyan
-    & $CachedGradle.FullName --no-daemon :app:assembleDebug
-} else {
-    throw "Gradle 8.11.1 or newer was not found. Install it or open the project in Android Studio once so Gradle can be downloaded, then rerun this script."
+if (-not $GradleExecutable) {
+    $GradleVersion = "8.11.1"
+    $GradleRoot = Join-Path $env:LOCALAPPDATA "xAssistant\gradle"
+    $GradleHome = Join-Path $GradleRoot "gradle-$GradleVersion"
+    $GradleExecutable = Join-Path $GradleHome "bin\gradle.bat"
+
+    if (-not (Test-Path $GradleExecutable)) {
+        New-Item -ItemType Directory -Path $GradleRoot -Force | Out-Null
+        $GradleZip = Join-Path $GradleRoot "gradle-$GradleVersion-bin.zip"
+        $GradleUrl = "https://services.gradle.org/distributions/gradle-$GradleVersion-bin.zip"
+
+        Write-Host "==> Downloading Gradle $GradleVersion..." -ForegroundColor Cyan
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $GradleUrl -OutFile $GradleZip -UseBasicParsing
+
+        Write-Host "==> Extracting Gradle $GradleVersion..." -ForegroundColor Cyan
+        Expand-Archive -LiteralPath $GradleZip -DestinationPath $GradleRoot -Force
+        Remove-Item $GradleZip -Force
+
+        if (-not (Test-Path $GradleExecutable)) {
+            throw "Gradle extraction completed, but gradle.bat was not found at $GradleExecutable"
+        }
+    }
 }
+
+Write-Host "==> Using Gradle: $GradleExecutable" -ForegroundColor Cyan
+Write-Host "==> Building Debug APK..." -ForegroundColor Cyan
+& $GradleExecutable --no-daemon :app:assembleDebug
 if ($LASTEXITCODE -ne 0) {
     throw "Gradle $BuildVariant build failed with exit code $LASTEXITCODE"
 }
