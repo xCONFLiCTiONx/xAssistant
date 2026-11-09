@@ -6,23 +6,21 @@ Set-Location $PSScriptRoot
 $BuildVariant = "Debug"
 $ApkPath = Join-Path $PSScriptRoot "app\build\outputs\apk\debug\app-debug.apk"
 
-# 1. Select a JDK supported by Gradle 8.11.1 and Android Gradle Plugin 8.9.2.
-# Java 25 is too new for this project. Prefer Java 21; Java 17 is also supported.
+# 1. Use only Java installations already present on this computer.
+# Do not download or install a JDK automatically.
 $jdkCandidates = @()
 if ($env:JAVA_HOME) { $jdkCandidates += $env:JAVA_HOME }
 $jdkCandidates += @(
     "C:\Program Files\Android\Android Studio\jbr",
-    "$env:LOCALAPPDATA\Programs\Android Studio\jbr",
-    "$env:LOCALAPPDATA\xAssistant\jdk\jdk-21"
+    "$env:LOCALAPPDATA\Programs\Android Studio\jbr"
 )
 
 $CompatibleJdk = $null
+$DetectedJava = @()
 foreach ($candidate in ($jdkCandidates | Select-Object -Unique)) {
     $javaExe = Join-Path $candidate "bin\java.exe"
     if (-not (Test-Path $javaExe)) { continue }
 
-    # java -version writes to stderr. Capture it with Start-Process so
-    # PowerShell does not promote native stderr output to a terminating error.
     $versionError = Join-Path $env:TEMP ("xassistant-java-version-" + [guid]::NewGuid().ToString("N") + ".txt")
     try {
         $versionProcess = Start-Process -FilePath $javaExe -ArgumentList "-version" -NoNewWindow -Wait -PassThru -RedirectStandardError $versionError
@@ -30,52 +28,23 @@ foreach ($candidate in ($jdkCandidates | Select-Object -Unique)) {
     } finally {
         Remove-Item -LiteralPath $versionError -Force -ErrorAction SilentlyContinue
     }
-    if ($versionProcess.ExitCode -ne 0) {
-        Write-Host "==> Could not query Java at $candidate; skipping." -ForegroundColor Yellow
-        continue
-    }
-    if ($versionOutput -match 'version "?(d+)') {
+    if ($versionProcess.ExitCode -ne 0) { continue }
+
+    if ($versionOutput -match 'version "?([0-9]+)') {
         $javaMajor = [int]$Matches[1]
-        if ($javaMajor -eq 21) {
-            $CompatibleJdk = $candidate
-            break
-        }
-        if ($javaMajor -eq 17 -and -not $CompatibleJdk) {
-            $CompatibleJdk = $candidate
-        }
-        Write-Host "==> Skipping unsupported Java $javaMajor at $candidate" -ForegroundColor Yellow
+        $DetectedJava += "Java $javaMajor ($candidate)"
+        if (-not $CompatibleJdk) { $CompatibleJdk = $candidate }
     }
 }
 
-# If no compatible JDK is installed, bootstrap a private Java 21 runtime.
 if (-not $CompatibleJdk) {
-    $JdkRoot = Join-Path $env:LOCALAPPDATA "xAssistant\jdk"
-    $JdkArchive = Join-Path $JdkRoot "temurin-21-windows-x64.zip"
-    New-Item -ItemType Directory -Path $JdkRoot -Force | Out-Null
-
-    Write-Host "==> Downloading Temurin JDK 21..." -ForegroundColor Cyan
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $JdkUrl = "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse"
-    Invoke-WebRequest -Uri $JdkUrl -OutFile $JdkArchive -UseBasicParsing
-
-    Write-Host "==> Extracting JDK 21..." -ForegroundColor Cyan
-    Expand-Archive -LiteralPath $JdkArchive -DestinationPath $JdkRoot -Force
-    Remove-Item $JdkArchive -Force
-
-    $ExtractedJdk = Get-ChildItem $JdkRoot -Directory |
-        Where-Object { Test-Path (Join-Path $_.FullName "bin\java.exe") } |
-        Select-Object -First 1
-    if (-not $ExtractedJdk) {
-        throw "JDK 21 extraction completed, but java.exe was not found under $JdkRoot"
-    }
-    $CompatibleJdk = $ExtractedJdk.FullName
+    throw "No installed JDK was found. Install/configure your preferred JDK and set JAVA_HOME. This script will not download one."
 }
 
 $env:JAVA_HOME = $CompatibleJdk
 $env:PATH = "$(Join-Path $env:JAVA_HOME 'bin');$env:PATH"
-$SelectedJavaVersion = (& (Join-Path $env:JAVA_HOME "bin\java.exe") -version 2>&1 | Select-Object -First 1)
-Write-Host "==> Using JAVA_HOME: $env:JAVA_HOME" -ForegroundColor Cyan
-Write-Host "==> Java: $SelectedJavaVersion" -ForegroundColor Cyan
+Write-Host "==> Using installed JAVA_HOME: $env:JAVA_HOME" -ForegroundColor Cyan
+Write-Host "==> Detected: $($DetectedJava -join '; ')" -ForegroundColor Gray
 
 if (-not $env:ANDROID_HOME -and -not $env:ANDROID_SDK_ROOT) {
     $sdkCandidates = @(
@@ -100,53 +69,23 @@ if ($env:ANDROID_HOME) {
     Write-Host "==> Using ANDROID_HOME: $env:ANDROID_HOME" -ForegroundColor Cyan
 }
 
-# 2. Find Gradle. Use the repository wrapper or installed/cached Gradle.
-# If none exists, download the pinned compatible Gradle distribution automatically.
-$GradleBat = Join-Path $PSScriptRoot "gradlew.bat"
+# 2. Use only Gradle already installed or already cached by the user.
+# Never download a Gradle distribution automatically.
 $GradleCommand = Get-Command gradle -ErrorAction SilentlyContinue
 $GradleExecutable = $null
-
-if (Test-Path $GradleBat) {
-    $GradleExecutable = $GradleBat
-} elseif ($GradleCommand) {
+if ($GradleCommand) {
     $GradleExecutable = $GradleCommand.Source
 } else {
     $GradleCache = Join-Path $env:USERPROFILE ".gradle\wrapper\dists"
     if (Test-Path $GradleCache) {
         $CachedGradle = Get-ChildItem $GradleCache -Filter "gradle.bat" -File -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match "gradle-8\.(11|1[2-9]|[2-9]\d)\." } |
             Sort-Object FullName -Descending |
             Select-Object -First 1
-
-        if ($CachedGradle) {
-            $GradleExecutable = $CachedGradle.FullName
-        }
+        if ($CachedGradle) { $GradleExecutable = $CachedGradle.FullName }
     }
 }
-
 if (-not $GradleExecutable) {
-    $GradleVersion = "8.11.1"
-    $GradleRoot = Join-Path $env:LOCALAPPDATA "xAssistant\gradle"
-    $GradleHome = Join-Path $GradleRoot "gradle-$GradleVersion"
-    $GradleExecutable = Join-Path $GradleHome "bin\gradle.bat"
-
-    if (-not (Test-Path $GradleExecutable)) {
-        New-Item -ItemType Directory -Path $GradleRoot -Force | Out-Null
-        $GradleZip = Join-Path $GradleRoot "gradle-$GradleVersion-bin.zip"
-        $GradleUrl = "https://services.gradle.org/distributions/gradle-$GradleVersion-bin.zip"
-
-        Write-Host "==> Downloading Gradle $GradleVersion..." -ForegroundColor Cyan
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $GradleUrl -OutFile $GradleZip -UseBasicParsing
-
-        Write-Host "==> Extracting Gradle $GradleVersion..." -ForegroundColor Cyan
-        Expand-Archive -LiteralPath $GradleZip -DestinationPath $GradleRoot -Force
-        Remove-Item $GradleZip -Force
-
-        if (-not (Test-Path $GradleExecutable)) {
-            throw "Gradle extraction completed, but gradle.bat was not found at $GradleExecutable"
-        }
-    }
+    throw "No installed/cached Gradle was found. This script will not download one. Run 'gradle --version' or tell me which Gradle versions are installed."
 }
 
 Write-Host "==> Using Gradle: $GradleExecutable" -ForegroundColor Cyan
