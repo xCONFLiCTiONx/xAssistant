@@ -60,6 +60,8 @@ class ReminderStore:
                 "SELECT * FROM reminders WHERE request_id = ?", (request_id,)
             ).fetchone()
             if existing:
+                if existing["original_transcript"] != transcript:
+                    raise ValueError("This request_id was already used for a different transcript.")
                 return self._row(existing)
             cursor = db.execute("""
                 INSERT INTO reminders
