@@ -21,8 +21,20 @@ foreach ($candidate in ($jdkCandidates | Select-Object -Unique)) {
     $javaExe = Join-Path $candidate "bin\java.exe"
     if (-not (Test-Path $javaExe)) { continue }
 
-    $versionOutput = (& $javaExe -version 2>&1 | Out-String)
-    if ($versionOutput -match 'version "?(\d+)') {
+    # java -version writes to stderr. Capture it with Start-Process so
+    # PowerShell does not promote native stderr output to a terminating error.
+    $versionError = Join-Path $env:TEMP ("xassistant-java-version-" + [guid]::NewGuid().ToString("N") + ".txt")
+    try {
+        $versionProcess = Start-Process -FilePath $javaExe -ArgumentList "-version" -NoNewWindow -Wait -PassThru -RedirectStandardError $versionError
+        $versionOutput = Get-Content -LiteralPath $versionError -Raw -ErrorAction SilentlyContinue
+    } finally {
+        Remove-Item -LiteralPath $versionError -Force -ErrorAction SilentlyContinue
+    }
+    if ($versionProcess.ExitCode -ne 0) {
+        Write-Host "==> Could not query Java at $candidate; skipping." -ForegroundColor Yellow
+        continue
+    }
+    if ($versionOutput -match 'version "?(d+)') {
         $javaMajor = [int]$Matches[1]
         if ($javaMajor -eq 21) {
             $CompatibleJdk = $candidate
