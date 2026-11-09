@@ -23,13 +23,24 @@ object ReminderAlarmScheduler {
     fun schedule(context: Context, id: Int, title: String, scheduledAt: String) {
         val triggerAt = OffsetDateTime.parse(scheduledAt).toInstant().toEpochMilli()
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putString("reminder:$id", JSONObject()
+        val key = "reminder:$id"
+        val previous = prefs.getString(key, null)?.let { runCatching { JSONObject(it).optString("scheduled_at") }.getOrNull() }
+        if (previous != null && previous != scheduledAt) {
+            prefs.edit().remove("delivered:$id").apply()
+        }
+        if (prefs.getBoolean("delivered:$id", false)) return
+
+        prefs.edit().putString(key, JSONObject()
             .put("id", id).put("title", title).put("scheduled_at", scheduledAt).toString()).apply()
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = alarmIntent(context, id, title)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            try {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            } catch (_: SecurityException) {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            }
         } else {
             // Fallback is inexact until the user grants exact-alarm access.
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
@@ -40,7 +51,7 @@ object ReminderAlarmScheduler {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmManager.cancel(alarmIntent(context, id, ""))
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .remove("reminder:$id").apply()
+            .remove("reminder:$id").remove("delivered:$id").apply()
     }
 
     fun restoreAll(context: Context) {
@@ -66,9 +77,13 @@ object ReminderAlarmScheduler {
     }
 
     fun showNotification(context: Context, id: Int, title: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val foreground = ProcessLifecycleOwner.get().lifecycle.currentState
             .isAtLeast(Lifecycle.State.STARTED)
-        if (foreground) return
+        if (foreground) {
+            prefs.edit().putBoolean("delivered:$id", true).apply()
+            return
+        }
 
         createChannel(context)
         val openApp = PendingIntent.getActivity(
@@ -88,6 +103,7 @@ object ReminderAlarmScheduler {
         if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < 33) {
             NotificationManagerCompat.from(context).notify(id, notification)
+            prefs.edit().putBoolean("delivered:$id", true).apply()
         }
     }
 
