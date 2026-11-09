@@ -13,7 +13,14 @@ $JavaExe = Join-Path $AndroidStudioJbr "bin\java.exe"
 if (-not (Test-Path $JavaExe)) { throw "Android Studio JBR not found at $JavaExe. No JDK will be downloaded." }
 $env:JAVA_HOME = $AndroidStudioJbr
 $env:PATH = "$(Join-Path $env:JAVA_HOME 'bin');$env:PATH"
-$JavaVersionOutput = (& $JavaExe -version 2>&1 | Out-String)
+$versionError = Join-Path $env:TEMP ("xassistant-java-version-" + [guid]::NewGuid().ToString("N") + ".txt")
+try {
+    $versionProcess = Start-Process -FilePath $JavaExe -ArgumentList "-version" -NoNewWindow -Wait -PassThru -RedirectStandardError $versionError
+    $JavaVersionOutput = Get-Content -LiteralPath $versionError -Raw -ErrorAction SilentlyContinue
+    if ($versionProcess.ExitCode -ne 0) { throw "Java version check failed: $JavaVersionOutput" }
+} finally {
+    Remove-Item -LiteralPath $versionError -Force -ErrorAction SilentlyContinue
+}
 if ($JavaVersionOutput -notmatch 'version "25\.') { throw "Expected installed Android Studio JBR 25.x. Found: $JavaVersionOutput" }
 Write-Host "==> Using Android Studio JBR: $env:JAVA_HOME" -ForegroundColor Cyan
 if (-not $env:ANDROID_HOME -and -not $env:ANDROID_SDK_ROOT) {
