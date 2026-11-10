@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <queries><intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent></queries>
-    <application android:allowBackup="false" android:label="xAssistant" android:icon="@drawable/ic_xassistant_launcher"
+    <application android:allowBackup="false" android:label="xAssistant" android:icon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
