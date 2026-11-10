@@ -46,3 +46,16 @@ The server currently persists reminders but does not run a durable delivery sche
 - Galaxy Watch companion and phone/watch Data Layer synchronization.
 - Server scheduler + FCM device registration for reminders created from Windows, watch, or another client.
 - HTTPS and authentication before remote Zero Trust access.
+
+
+## Wear OS companion
+
+The `:wear` Gradle module builds the paired Galaxy Watch app. Install both phone and watch variants. The watch uses Android speech recognition to produce a text transcript, then sends that text to the paired phone over the Wear OS Data Layer. The phone forwards the transcript to the same xServer reminder API and relays the server result. The watch app does not call xServer directly and does not transmit audio.
+
+- Phone app ID: `cc.xconflictionx.xassistant`
+- Watch app ID: `cc.xconflictionx.xassistant.wear`
+- Watch minimum SDK: 30 (Wear OS 3 generation and newer)
+- Data Layer paths: `/xassistant/reminder` and `/xassistant/result`
+- Build both modules from the `android/` project in Android Studio; select the phone or wear run configuration.
+
+The watch launcher has a compact companion mark; the phone uses an adaptive launcher icon with matching colors. The phone remains the bridge and the xServer remains authoritative.
