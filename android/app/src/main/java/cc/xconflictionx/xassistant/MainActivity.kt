@@ -1,6 +1,8 @@
 package cc.xconflictionx.xassistant
 
 import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -33,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.work.BackoffPolicy
@@ -69,7 +72,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = xAssistantDarkColors) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    ReminderScreen()
+                    if (packageManager.hasSystemFeature(PackageManager.FEATURE_WATCH)) {
+                        WatchReminderScreen()
+                    } else {
+                        ReminderScreen()
+                    }
                 }
             }
         }
@@ -316,6 +323,116 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+}
+
+
+@Composable
+private fun WatchReminderScreen() {
+    val context = LocalContext.current
+    val workManager = remember { WorkManager.getInstance(context) }
+    var transcript by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf("Starting voice input…") }
+    var busy by remember { mutableStateOf(false) }
+    var activeWorkId by remember { mutableStateOf(UUID(0L, 0L)) }
+    val workInfo by workManager.getWorkInfoByIdLiveData(activeWorkId).observeAsState()
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            transcript = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull().orEmpty()
+            status = if (transcript.isBlank()) "Didn't catch that. Listen again."
+                else "Review your reminder, then send."
+        } else {
+            status = "Ready when you are. Tap Listen again."
+        }
+    }
+
+    fun listenAgain() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your reminder")
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+        status = "Listening…"
+        try {
+            speechLauncher.launch(intent)
+        } catch (_: Exception) {
+            status = "Speech recognition isn't available."
+        }
+    }
+
+    LaunchedEffect(Unit) { listenAgain() }
+
+    LaunchedEffect(workInfo?.id, workInfo?.state) {
+        val info = workInfo ?: return@LaunchedEffect
+        if (info.state.isFinished) {
+            busy = false
+            val data = info.outputData
+            if (info.state == WorkInfo.State.SUCCEEDED &&
+                data.getString(ReminderSaveWorker.KEY_STATUS) == "saved") {
+                val title = data.getString(ReminderSaveWorker.KEY_TITLE).orEmpty()
+                transcript = ""
+                status = if (title.isBlank()) "Reminder sent and saved." else "Saved: $title"
+            } else {
+                status = data.getString(ReminderSaveWorker.KEY_ERROR)
+                    ?: "Reminder wasn't saved. Listen again to retry."
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+    ) {
+        Text("xAssistant", style = MaterialTheme.typography.titleLarge)
+        Text(status, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+        if (transcript.isNotBlank()) {
+            Text(transcript, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+        }
+
+        Button(
+            modifier = Modifier.fillMaxWidth(),
+            enabled = transcript.isNotBlank() && !busy,
+            onClick = {
+                val exactTranscript = transcript.trim()
+                if (exactTranscript.isNotBlank() && !busy) {
+                    busy = true
+                    status = "Sending to xServer…"
+                    val request = OneTimeWorkRequestBuilder<ReminderSaveWorker>()
+                        .setInputData(workDataOf(
+                            ReminderSaveWorker.KEY_TRANSCRIPT to exactTranscript,
+                            ReminderSaveWorker.KEY_BASE_URL to BuildConfig.SERVER_BASE_URL,
+                            ReminderSaveWorker.KEY_REQUEST_ID to UUID.randomUUID().toString()
+                        ))
+                        .setConstraints(Constraints.Builder()
+                            .setRequiredNetworkType(NetworkType.CONNECTED).build())
+                        .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                        .addTag("xassistant-reminder-save")
+                        .build()
+                    activeWorkId = request.id
+                    workManager.enqueueUniqueWork(
+                        "xassistant-save-${request.id}", ExistingWorkPolicy.KEEP, request
+                    )
+                }
+            }
+        ) {
+            Text(if (busy) "Sending…" else "Send reminder")
+        }
+
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !busy,
+            onClick = { listenAgain() }
+        ) {
+            Text("Listen again")
         }
     }
 }
