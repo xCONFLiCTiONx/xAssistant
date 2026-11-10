@@ -9,23 +9,11 @@ import java.net.URL
 import java.util.UUID
 
 data class ReminderResult(
-    val status: String,
-    val originalTranscript: String,
-    val reminderId: Int? = null,
-    val title: String? = null,
-    val scheduledAt: String? = null,
-    val recurrence: String? = null,
-    val clarification: String? = null,
-    val error: String? = null
+    val status: String, val originalTranscript: String, val reminderId: Int? = null,
+    val title: String? = null, val scheduledAt: String? = null, val recurrence: String? = null,
+    val clarification: String? = null, val error: String? = null
 )
-
-data class ReminderItem(
-    val id: Int,
-    val title: String,
-    val scheduledAt: String,
-    val recurrence: String?,
-    val status: String
-)
+data class ReminderItem(val id: Int, val title: String, val scheduledAt: String, val recurrence: String?, val status: String)
 
 class ReminderApi(private val baseUrl: String = BuildConfig.SERVER_BASE_URL) {
     private suspend fun request(path: String, method: String = "GET", body: JSONObject? = null): String =
@@ -49,11 +37,9 @@ class ReminderApi(private val baseUrl: String = BuildConfig.SERVER_BASE_URL) {
             } finally { connection.disconnect() }
         }
 
-    suspend fun create(transcript: String): ReminderResult {
-        val json = JSONObject(request(
-            "/v1/reminders", "POST",
-            JSONObject().put("request_id", UUID.randomUUID().toString()).put("transcript", transcript)
-        ))
+    suspend fun create(transcript: String, requestId: String = UUID.randomUUID().toString()): ReminderResult {
+        val json = JSONObject(request("/v1/reminders", "POST",
+            JSONObject().put("request_id", requestId).put("transcript", transcript)))
         val reminder = json.optJSONObject("reminder")
         val interpretation = json.optJSONObject("interpretation")
         return ReminderResult(
@@ -71,20 +57,15 @@ class ReminderApi(private val baseUrl: String = BuildConfig.SERVER_BASE_URL) {
         )
     }
 
-    suspend fun list(): List<ReminderItem> {
-        val array = JSONArray(request("/v1/reminders"))
+    suspend fun list(includeInactive: Boolean = false): List<ReminderItem> {
+        val suffix = if (includeInactive) "?include_inactive=true" else ""
+        val array = JSONArray(request("/v1/reminders$suffix"))
         return (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
-            ReminderItem(
-                id = item.getInt("id"),
-                title = item.getString("title"),
-                scheduledAt = item.getString("scheduled_at"),
-                recurrence = item.optString("recurrence").takeUnless { it == "null" || it.isBlank() },
-                status = item.getString("status")
-            )
+            ReminderItem(item.getInt("id"), item.getString("title"), item.getString("scheduled_at"),
+                item.optString("recurrence").takeUnless { it == "null" || it.isBlank() }, item.getString("status"))
         }
     }
-
     suspend fun cancel(id: Int) { request("/v1/reminders/$id", "DELETE") }
     suspend fun complete(id: Int) { request("/v1/reminders/$id/complete", "POST") }
 }
