@@ -21,13 +21,13 @@ import kotlinx.coroutines.tasks.await
 import java.util.Locale
 import java.util.UUID
 
-class WatchActivity : ComponentActivity() {
+class WatchActivity : ComponentActivity() {\n    private fun formatResult(raw: String): String {\n        val parts = raw.split("\\n", limit = 3)\n        return when (parts.firstOrNull()) {\n            "SAVED" -> "✓ Saved: " + parts.getOrNull(1).orEmpty()\n            "ERROR" -> "Not saved: " + parts.getOrNull(1).orEmpty()\n            else -> raw\n        }\n    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
                 val scope = rememberCoroutineScope()
-                var status by remember { mutableStateOf("Ready when you are.") }
+                var status by remember { mutableStateOf(intent.getStringExtra("xassistant_result")?.let(::formatResult) ?: "Ready when you are.") }
                 var transcript by remember { mutableStateOf("") }
                 var sending by remember { mutableStateOf(false) }
                 val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
