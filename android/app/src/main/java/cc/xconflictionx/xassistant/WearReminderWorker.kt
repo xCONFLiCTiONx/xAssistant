@@ -13,6 +13,7 @@ class WearReminderWorker(context: Context, params: WorkerParameters) : Coroutine
         val requestId = inputData.getString(KEY_REQUEST_ID) ?: return Result.failure()
         val result = try { ReminderApi().create(transcript, requestId) }
         catch (error: Exception) {
+            if (runAttemptCount < 3) return Result.retry()
             send(nodeId, "ERROR\n${error.message ?: "xServer could not save the reminder."}\n$transcript")
             return Result.failure()
         }
