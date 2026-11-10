@@ -1,6 +1,6 @@
 # xAssistant Android
 
-Native Kotlin / Jetpack Compose phone client.
+Native Kotlin / Jetpack Compose phone client, plus a separate Wear OS companion module (`:wear`).
 
 ## Implemented
 
