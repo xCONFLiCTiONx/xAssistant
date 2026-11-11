@@ -86,6 +86,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun ReminderScreen() {
         val context = LocalContext.current
+        val launchedAsAssistant = (context as? Activity)?.intent?.getBooleanExtra(
+            "cc.xconflictionx.xassistant.EXTRA_ASSISTANT_LAUNCH", false
+        ) == true
         val scope = rememberCoroutineScope()
         val api = remember { ReminderApi() }
         val workManager = remember { WorkManager.getInstance(context) }
@@ -176,7 +179,7 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {
                 message = "xServer is unavailable. A new reminder will wait until a connection is available."
             }
-            if (Build.VERSION.SDK_INT >= 33 && !notificationsAllowed) {
+            if (Build.VERSION.SDK_INT >= 33 && !notificationsAllowed && !launchedAsAssistant) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
             ReminderAlarmScheduler.restoreAll(context)
@@ -184,9 +187,7 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(Unit) {
             val hostActivity = context as? Activity
-            if (hostActivity?.intent?.getBooleanExtra(
-                    "cc.xconflictionx.xassistant.EXTRA_ASSISTANT_LAUNCH", false
-                ) == true) {
+            if (launchedAsAssistant && hostActivity != null) {
                 hostActivity.intent.removeExtra("cc.xconflictionx.xassistant.EXTRA_ASSISTANT_LAUNCH")
                 val voiceIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
