@@ -4,7 +4,15 @@
     <application android:label="xAssistant Watch" android:icon="@drawable/ic_xassistant_watch" android:allowBackup="false" android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <meta-data android:name="com.google.android.wearable.standalone" android:value="false" />
         <activity android:name=".WatchActivity" android:exported="true">
-            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <action android:name="android.intent.action.VOICE_ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
         <service android:name=".XAssistantVoiceInteractionService" android:label="xAssistant"
             android:permission="android.permission.BIND_VOICE_INTERACTION" android:exported="true">
