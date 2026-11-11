@@ -125,6 +125,19 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host ($installOutput | Out-String).Trim() -ForegroundColor Gray
 
+# The watch assistant uses secure settings registration. Grant it automatically
+# on the same detected watch, after the APK has been installed successfully.
+if ($Module -eq "wear") {
+    Write-Host "==> Granting watch assistant registration permission..." -ForegroundColor Cyan
+    $grantOutput = & $AdbPath -s $Serial shell pm grant $PackageName android.permission.WRITE_SECURE_SETTINGS 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ($grantOutput | Out-String).Trim() -ForegroundColor Yellow
+        Write-Host "==> Permission grant was not accepted by this Wear OS build; app installation succeeded." -ForegroundColor Yellow
+    } else {
+        Write-Host "==> Watch assistant registration permission granted." -ForegroundColor Green
+    }
+}
+
 # Launch the installed app.
 Write-Host "==> Resolving launcher activity..." -ForegroundColor Cyan
 $ActivityOutput = & $AdbPath -s $Serial shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER $PackageName 2>$null
