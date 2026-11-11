@@ -16,13 +16,14 @@ class XAssistantVoiceInteractionSessionService : VoiceInteractionSessionService(
 
 private class XAssistantVoiceInteractionSession(context: Context) :
     VoiceInteractionSession(context) {
+    private val appContext = context.applicationContext
     override fun onPrepareShow(args: Bundle?, showFlags: Int) {
         setUiEnabled(false)
     }
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
         startAssistantActivity(
-            Intent(context, MainActivity::class.java)
+            Intent(appContext, MainActivity::class.java)
                 .putExtra("cc.xconflictionx.xassistant.EXTRA_ASSISTANT_LAUNCH", true)
         )
         hide()
