@@ -61,7 +61,7 @@ class WatchActivity : ComponentActivity() {
                 var assistantRegistered by remember {
                     mutableStateOf(
                         Settings.Secure.getString(
-                            contentResolver, Settings.Secure.VOICE_INTERACTION_SERVICE
+                            contentResolver, "voice_interaction_service"
                         ) == assistantComponent
                     )
                 }
@@ -201,7 +201,7 @@ private fun WatchActivity.registerAssistantIfPermitted(component: String): Boole
     ) return false
 
     val assistant = Settings.Secure.putString(
-        contentResolver, Settings.Secure.ASSISTANT, component
+        contentResolver, "assistant", component
     )
     val interaction = Settings.Secure.putString(
         contentResolver, Settings.Secure.VOICE_INTERACTION_SERVICE, component
