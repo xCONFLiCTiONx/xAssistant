@@ -204,7 +204,7 @@ private fun WatchActivity.registerAssistantIfPermitted(component: String): Boole
         contentResolver, "assistant", component
     )
     val interaction = Settings.Secure.putString(
-        contentResolver, Settings.Secure.VOICE_INTERACTION_SERVICE, component
+        contentResolver, "voice_interaction_service", component
     )
     return assistant && interaction
 }
