@@ -1,7 +1,9 @@
 package cc.xconflictionx.xassistant.wear
 
 import android.app.Activity
-import android.app.role.RoleManager
+import android.Manifest
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.content.Context
 import android.content.Intent
 import android.service.voice.VoiceInteractionService
@@ -9,6 +11,7 @@ import android.service.voice.VoiceInteractionSession
 import android.service.voice.VoiceInteractionSessionService
 import android.os.Bundle
 import android.os.Build
+import android.provider.Settings
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -42,6 +45,10 @@ class WatchActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val incomingResult = intent.getStringExtra("xassistant_result")
+        val assistantComponent = ComponentName(
+            this, XAssistantVoiceInteractionService::class.java
+        ).flattenToShortString()
+        registerAssistantIfPermitted(assistantComponent)
 
         setContent {
             MaterialTheme {
@@ -51,17 +58,12 @@ class WatchActivity : ComponentActivity() {
                 }
                 var transcript by remember { mutableStateOf("") }
                 var sending by remember { mutableStateOf(false) }
-                var assistantRoleHeld by remember {
-                    mutableStateOf(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                        getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true)
-                }
-                val assistantRoleRequest = rememberLauncherForActivityResult(
-                    ActivityResultContracts.StartActivityForResult()
-                ) {
-                    assistantRoleHeld = getSystemService(RoleManager::class.java)
-                        ?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true
-                    status = if (assistantRoleHeld) "xAssistant is your default watch assistant."
-                        else "xAssistant was not selected as the watch assistant."
+                var assistantRegistered by remember {
+                    mutableStateOf(
+                        Settings.Secure.getString(
+                            contentResolver, Settings.Secure.VOICE_INTERACTION_SERVICE
+                        ) == assistantComponent
+                    )
                 }
 
                 val speech = rememberLauncherForActivityResult(
@@ -112,22 +114,18 @@ class WatchActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text("xAssistant", style = MaterialTheme.typography.titleMedium)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            OutlinedButton(
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = {
-                                    val roleManager = getSystemService(RoleManager::class.java)
-                                    if (roleManager?.isRoleAvailable(RoleManager.ROLE_ASSISTANT) == true) {
-                                        assistantRoleRequest.launch(
-                                            roleManager.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
-                                        )
-                                    } else {
-                                        status = "Choose xAssistant under Settings > Apps > Default apps > Digital assistant."
-                                    }
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                if (registerAssistantIfPermitted(assistantComponent)) {
+                                    assistantRegistered = true
+                                    status = "xAssistant is registered as the watch assistant. Set Home button > Press and hold > Assistant."
+                                } else {
+                                    status = "Grant WRITE_SECURE_SETTINGS over ADB, then reopen xAssistant."
                                 }
-                            ) {
-                                Text(if (assistantRoleHeld) "Default assistant selected" else "Set as watch assistant")
                             }
+                        ) {
+                            Text(if (assistantRegistered) "xAssistant is the default assistant" else "Register xAssistant as assistant")
                         }
                         Text(status, textAlign = TextAlign.Center)
                         if (transcript.isNotBlank()) {
@@ -197,8 +195,24 @@ class XAssistantVoiceInteractionSessionService : VoiceInteractionSessionService(
     }
 }
 
+private fun WatchActivity.registerAssistantIfPermitted(component: String): Boolean {
+    if (checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) !=
+        PackageManager.PERMISSION_GRANTED
+    ) return false
+
+    val assistant = Settings.Secure.putString(
+        contentResolver, Settings.Secure.ASSISTANT, component
+    )
+    val interaction = Settings.Secure.putString(
+        contentResolver, Settings.Secure.VOICE_INTERACTION_SERVICE, component
+    )
+    return assistant && interaction
+}
+
 private class XAssistantVoiceInteractionSession(context: Context) :
     VoiceInteractionSession(context) {
+
+    private val appContext = context.applicationContext
 
     override fun onPrepareShow(args: Bundle?, showFlags: Int) {
         setUiEnabled(false)
@@ -207,7 +221,7 @@ private class XAssistantVoiceInteractionSession(context: Context) :
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
 
-        val launchIntent = Intent(context, WatchActivity::class.java).apply {
+        val launchIntent = Intent(appContext, WatchActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra("cc.xconflictionx.xassistant.EXTRA_ASSISTANT_LAUNCH", true)
         }
