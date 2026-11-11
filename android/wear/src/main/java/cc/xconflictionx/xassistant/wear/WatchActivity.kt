@@ -1,8 +1,10 @@
 package cc.xconflictionx.xassistant.wear
 
 import android.app.Activity
+import android.app.role.RoleManager
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -45,6 +47,18 @@ class WatchActivity : ComponentActivity() {
                 }
                 var transcript by remember { mutableStateOf("") }
                 var sending by remember { mutableStateOf(false) }
+                var assistantRoleHeld by remember {
+                    mutableStateOf(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                        getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true)
+                }
+                val assistantRoleRequest = rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+                ) {
+                    assistantRoleHeld = getSystemService(RoleManager::class.java)
+                        ?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true
+                    status = if (assistantRoleHeld) "xAssistant is your default watch assistant."
+                        else "xAssistant was not selected as the watch assistant."
+                }
 
                 val speech = rememberLauncherForActivityResult(
                     ActivityResultContracts.StartActivityForResult()
@@ -94,6 +108,23 @@ class WatchActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text("xAssistant", style = MaterialTheme.typography.titleMedium)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            OutlinedButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = {
+                                    val roleManager = getSystemService(RoleManager::class.java)
+                                    if (roleManager?.isRoleAvailable(RoleManager.ROLE_ASSISTANT) == true) {
+                                        assistantRoleRequest.launch(
+                                            roleManager.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
+                                        )
+                                    } else {
+                                        status = "Choose xAssistant under Settings > Apps > Default apps > Digital assistant."
+                                    }
+                                }
+                            ) {
+                                Text(if (assistantRoleHeld) "Default assistant selected" else "Set as watch assistant")
+                            }
+                        }
                         Text(status, textAlign = TextAlign.Center)
                         if (transcript.isNotBlank()) {
                             Text(
