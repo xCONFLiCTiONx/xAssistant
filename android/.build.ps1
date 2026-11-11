@@ -47,8 +47,10 @@ Write-Host "==> Detecting connected Android device..." -ForegroundColor Cyan
 $devicesOutput = & $AdbPath devices
 if ($LASTEXITCODE -ne 0) { throw "Could not query Android devices through ADB." }
 $deviceLines = @($devicesOutput | Select-Object -Skip 1 | Where-Object { "$_".Trim() })
-$unauthorizedDevices = @($deviceLines | Where-Object { $_ -match "^\S+\s+unauthorized\s*$" })
-$connectedDevices = @($deviceLines | Where-Object { $_ -match "^\S+\s+device\s*$" })
+# Wireless ADB serials can contain spaces (for example, paired-device names).
+# Match the state at the end of the line and preserve the complete serial.
+$unauthorizedDevices = @($deviceLines | Where-Object { $_ -match "^.+\s+unauthorized\s*$" })
+$connectedDevices = @($deviceLines | Where-Object { $_ -match "^.+\s+device\s*$" })
 
 if ($connectedDevices.Count -eq 0) {
     Write-Host ($devicesOutput | Out-String) -ForegroundColor Yellow
@@ -60,7 +62,9 @@ if ($connectedDevices.Count -gt 1) {
     throw "More than one Android device is connected. Leave only the target device connected and rerun."
 }
 
-$Serial = ($connectedDevices[0] -split "\s+")[0]
+$SerialMatch = [regex]::Match("$($connectedDevices[0])", "^(.+)\s+device\s*$")
+if (-not $SerialMatch.Success) { throw "Could not parse the connected ADB device serial." }
+$Serial = $SerialMatch.Groups[1].Value.Trim()
 $Characteristics = (& $AdbPath -s $Serial shell getprop ro.build.characteristics 2>$null | Out-String).Trim()
 $Model = (& $AdbPath -s $Serial shell getprop ro.product.model 2>$null | Out-String).Trim()
 $Device = (& $AdbPath -s $Serial shell getprop ro.product.device 2>$null | Out-String).Trim()
