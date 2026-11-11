@@ -2,6 +2,7 @@ package cc.xconflictionx.xassistant
 
 import android.Manifest
 import android.app.Activity
+import android.app.role.RoleManager
 import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
@@ -85,6 +86,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun ReminderScreen() {
         val context = LocalContext.current
+        val launchedAsAssistant = (context as? Activity)?.intent?.getBooleanExtra(
+            "cc.xconflictionx.xassistant.EXTRA_ASSISTANT_LAUNCH", false
+        ) == true
         val scope = rememberCoroutineScope()
         val api = remember { ReminderApi() }
         val workManager = remember { WorkManager.getInstance(context) }
@@ -103,11 +107,23 @@ class MainActivity : ComponentActivity() {
         var batteryOptimizationIgnored by remember { mutableStateOf(
             (context.getSystemService(POWER_SERVICE) as android.os.PowerManager).isIgnoringBatteryOptimizations(packageName)
         ) }
+        var assistantRoleHeld by remember {
+            mutableStateOf(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true)
+        }
 
         val workInfo by workManager.getWorkInfoByIdLiveData(activeWorkId).observeAsState()
         val notificationPermissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { notificationsAllowed = it }
+        val assistantRoleLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) {
+            assistantRoleHeld = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true
+            message = if (assistantRoleHeld) "xAssistant is now your default digital assistant."
+                else "xAssistant was not selected as the default assistant."
+        }
 
         fun refreshPermissionState() {
             notificationsAllowed = Build.VERSION.SDK_INT < 33 ||
@@ -117,6 +133,8 @@ class MainActivity : ComponentActivity() {
                 (context.getSystemService(ALARM_SERVICE) as android.app.AlarmManager).canScheduleExactAlarms()
             batteryOptimizationIgnored = (context.getSystemService(POWER_SERVICE) as android.os.PowerManager)
                 .isIgnoringBatteryOptimizations(packageName)
+            assistantRoleHeld = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true
         }
 
         DisposableEffect(Unit) {
@@ -161,10 +179,25 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {
                 message = "xServer is unavailable. A new reminder will wait until a connection is available."
             }
-            if (Build.VERSION.SDK_INT >= 33 && !notificationsAllowed) {
+            if (Build.VERSION.SDK_INT >= 33 && !notificationsAllowed && !launchedAsAssistant) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
             ReminderAlarmScheduler.restoreAll(context)
+        }
+
+        LaunchedEffect(Unit) {
+            val hostActivity = context as? Activity
+            if (launchedAsAssistant && hostActivity != null) {
+                hostActivity.intent.removeExtra("cc.xconflictionx.xassistant.EXTRA_ASSISTANT_LAUNCH")
+                val voiceIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "How can I help?")
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                }
+                runCatching { speechLauncher.launch(voiceIntent) }
+                    .onFailure { message = "Speech recognition is unavailable." }
+            }
         }
 
         LaunchedEffect(workInfo?.id, workInfo?.state) {
@@ -191,6 +224,27 @@ class MainActivity : ComponentActivity() {
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("xAssistant", style = MaterialTheme.typography.headlineLarge)
             Text("Your reminders, understood naturally.", style = MaterialTheme.typography.bodyLarge)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(if (assistantRoleHeld) "xAssistant is your default digital assistant."
+                            else "Make xAssistant your default digital assistant.")
+                        if (!assistantRoleHeld) {
+                            Button(onClick = {
+                                val roleManager = context.getSystemService(RoleManager::class.java)
+                                if (roleManager?.isRoleAvailable(RoleManager.ROLE_ASSISTANT) == true) {
+                                    assistantRoleLauncher.launch(
+                                        roleManager.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
+                                    )
+                                } else {
+                                    message = "This Android version does not expose the assistant role."
+                                }
+                            }) { Text("Set as default assistant") }
+                        }
+                    }
+                }
+            }
 
             if (!notificationsAllowed) {
                 Card(Modifier.fillMaxWidth()) {
