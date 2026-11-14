@@ -14,7 +14,7 @@ ENV_FILE="/etc/xassistant-server.env"
 UNIT_SOURCE="$SERVER_SOURCE/deploy/xassistant-api.service"
 UNIT_TARGET="/etc/systemd/system/xassistant-api.service"
 API_HOST="192.168.88.50"
-OLLAMA_URL="http://192.168.88.50:11434"
+OLLAMA_URL="http://127.0.0.1:11434"
 MODEL="qwen3.5:4b-q4_K_M"
 
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
